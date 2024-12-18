@@ -1,0 +1,116 @@
+Дело о пропавшей производительности в PostgreSQL: руководство по поимке и обезвреживанию проблемных запросов
+https://pgconf.ru/talk/1907134
+
+-- Долгие запросы 
+смотрим в логах 
+Настройка СУБД парамтер  log_min_duration_statment='10мс'
+select pg_reload_conf();
+-- Подозрительные запросы 
+расширение pg_stat_statments
+
+добавить в shared_preload_libaries
+create extention pg_stat_statments;
+
+query (text) - Текст, представляющий оператор
+calls (bigint) - Число выполнений
+total_exec_time (double precision) - Общее время, затраченное на выполнение оператора, в миллисекундах  --- 
+min_exec_time (double precision) - Минимальное время, затраченное на выполнение оператора, в миллисекундах
+max_exec_time (double precision) - Максимальное время, затраченное на выполнение оператора, в миллисекундах
+mean_exec_time (double precision) - Среднее время, затраченное на выполнение оператора, в миллисекундах
+stddev_exec_time (double precision) - Стандартное отклонение времени, затраченного на выполнение оператора, в миллисекундах  --
+Если этот парамтер высокий - один и тотже запрос выполяется то бысто то медленно 
+rows (bigint) - Общее число строк, полученных или затронутых оператором
+
+Итог: 
+-- Частые запросы 
+select query, calls, total_exec_time, min_exec_time, max_exec_time, stddev_exec_time
+from pg_stat_statments
+ORDER BY mean_exec_time desc;  -- Среднее время выполнения 
+или 
+ORDER BY total_exec_time desc; -- общее суммарное время выполненния
+
+-- Частые запрсоы по CPU
+select query, calls, total_exec_time, min_exec_time, max_exec_time, stddev_exec_time, rows
+(100 * total_exec_time / sum(total_exec_time)
+over()) as cpu_perc -- но это не cpu
+from pg_stat_statments
+ORDER BY cpu_perc desc; -- загрузка CPU - это время потраченное на выполнение одного запроса на общее потраченное время на все запросы 
+
+Еще одно расширение по статистике 
+pgpro_stats 
+
+explain Запрос - запрос не выполниться 
+
+explain analyze  Запрос - запрос  выполниться 
+Чтобы проверить точные цифры - 
+begin 
+explain analyze  Запрос
+rollback 
+
+
+
+Индексы 
+Nested loop
+Merge join
+Hash Join 
+
+Можно еще отключить сканирование по всей таблице 
+
+set  enable_seqscan to Off; -  на всю сессию, но можно использовать расширения
+sr_plan, pg_hint_plan, ago , auto_explain. 
+
+-- Запущено у меня что-то ( прямо сейчас) 
+
+select pid, backend_type, state, query, wait_event_type, wait_event
+from pg_stat_activity;
+-- Заблокировано что-то у меня сейчас 
+
+select * from pg_locks
+left join pg_stat_activity
+on pg_locks.pid = pg_stat_activity.pid
+
+Можно воспользоваться этом запросом 
+https://wiki.postgresql.org/wiki/Lock_Monitoring
+--Следующий запрос может быть полезен для просмотра того, какие процессы блокируют SQL-запросы (он находит только блокировки на уровне строк, а не на уровне объектов).
+  SELECT blocked_locks.pid     AS blocked_pid,
+         blocked_activity.usename  AS blocked_user,
+         blocking_locks.pid     AS blocking_pid,
+         blocking_activity.usename AS blocking_user,
+         blocked_activity.query    AS blocked_statement,
+         blocking_activity.query   AS current_statement_in_blocking_process
+   FROM  pg_catalog.pg_locks         blocked_locks
+    JOIN pg_catalog.pg_stat_activity blocked_activity  ON blocked_activity.pid = blocked_locks.pid
+    JOIN pg_catalog.pg_locks         blocking_locks 
+        ON blocking_locks.locktype = blocked_locks.locktype
+        AND blocking_locks.database IS NOT DISTINCT FROM blocked_locks.database
+        AND blocking_locks.relation IS NOT DISTINCT FROM blocked_locks.relation
+        AND blocking_locks.page IS NOT DISTINCT FROM blocked_locks.page
+        AND blocking_locks.tuple IS NOT DISTINCT FROM blocked_locks.tuple
+        AND blocking_locks.virtualxid IS NOT DISTINCT FROM blocked_locks.virtualxid
+        AND blocking_locks.transactionid IS NOT DISTINCT FROM blocked_locks.transactionid
+        AND blocking_locks.classid IS NOT DISTINCT FROM blocked_locks.classid
+        AND blocking_locks.objid IS NOT DISTINCT FROM blocked_locks.objid
+        AND blocking_locks.objsubid IS NOT DISTINCT FROM blocked_locks.objsubid
+        AND blocking_locks.pid != blocked_locks.pid
+
+    JOIN pg_catalog.pg_stat_activity blocking_activity ON blocking_activity.pid = blocking_locks.pid
+   WHERE NOT blocked_locks.granted;
+
+Просмотреть на каком этапе выполяется запрос 
+pg_stat_progress_*
+28.4.1. Отслеживание выполнения ANALYZE
+28.4.2. Отслеживание выполнения CREATE INDEX
+28.4.3. Отслеживание выполнения VACUUM
+28.4.4. Отслеживание выполнения CLUSTER
+28.4.5. Отслеживание выполнение базового копирования
+28.4.6. Отслеживание выполнения COPY
+
+pg_query_state   - сиюминутный Explain analyze запроса 
+
+Этап 1  
+Находим запрос 
+select pid from pg_stat_activity
+where query like 'тест запроса'
+--полученный pid 
+смотрим 
+select * from pg_query_state(pid)
