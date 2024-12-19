@@ -1,0 +1,3 @@
+Fatal the database system is starting up - Бд запускается, но что то не получается  -смотрим логи или wal сегмент уехал 
+Если бд живая gj 5432 подключаемся, но висим по 6544 - забиты пуллы коннетков в pg_bouncer - решение - Стоп старт
+fatal too many connections for role - увеличение лимитов 
