@@ -114,3 +114,6 @@ where query like 'тест запроса'
 --полученный pid 
 смотрим 
 select * from pg_query_state(pid)
+
+Посмотреть в режиме реального времени explain analyze 
+select * from pg_progress_bar_visial(pid,сек)
