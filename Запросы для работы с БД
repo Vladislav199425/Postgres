@@ -1,0 +1,7 @@
+Размеры таблицы 
+select 
+pg_total_relation_size(tb1),
+pg_total_size(tb1), -- общий размер таблицы или индекса, включая сам объект и все зависимые от него объекты
+pg_relation_size(tb1), -- это система-функция в PostgreSQL, которая определяет размер на диске конкретного слоя отношени
+pg_table_size(tb1)-pg_relation_size(tb1)
+from (select '<tablename>'::regclass as tb1) t1;
