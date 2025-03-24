@@ -6,6 +6,158 @@ pg_relation_size(tb1), -- это система-функция в PostgreSQL, к
 pg_table_size(tb1)-pg_relation_size(tb1)
 from (select '<tablename>'::regclass as tb1) t1;
 
+#################################
+Сброс профиля ожиданий и очистка памяти (сброс статистики ) 
+select pg_wait_sampling_reset_profile();
+#################################
+
+-- Размеры таблицы 
+select 
+pg_total_relation_size(tb1),
+pg_total_size(tb1), -- общий размер таблицы или индекса, включая сам объект и все зависимые от него объекты
+pg_relation_size(tb1), -- это система-функция в PostgreSQL, которая определяет размер на диске конкретного слоя отношени
+pg_table_size(tb1)-pg_relation_size(tb1)
+from (select '<tablename>'::regclass as tb1) t1;
+
+
+-- Время с момента запуска процесса postmaster:
+psql -c "select date_trunc( 'second',current_timestamp - pg_postmaster_start_time()) as uptime"
+-- При "падении" серверного процесса, имеющего доступ к разделяемой памяти, перезапуск postmaster не происходит, в то же время все остальные процессы перезапускаются.
+-- В этом случае время перезапуска можно определить по перечитыванию конфигурации:
+select pg_conf_load_time();
+
+########################################################
+Отслеживание долговыполняющихся запросов и блокировок 
+########################################################
+--- Долго выполняющиеся запросы. 
+-- По активным сесиям state ='active', тип текущего серверного процесса backend_type ='client backend', не равняется pid != pg_backend_pid()
+select 
+ pid , 
+ datname ,  
+ query_start , 
+ now() - query_start AS duration, 
+ state , 
+ wait_event_type ,
+ wait_event  , 
+substring( query from 1 for 100 ) AS query 
+from 
+pg_stat_activity 
+where 
+state ='active' and backend_type ='client backend' and pid != pg_backend_pid()
+order by 4 desc ;
+--- Долго выполняющиеся запросы. 
+-- Топ 4 процесса. По активным сесиям state ='active', не равняется pid != pg_backend_pid()
+select 
+ pid , 
+ datname ,  
+ query_start , 
+ now() - query_start AS duration, 
+ state , 
+ wait_event_type , 
+ wait_event  , 
+ substring( query from 1 for 100 ) AS query ,
+ usename , 
+ application_name , 
+ client_addr
+from 
+pg_stat_activity 
+where 
+state ='active' and 
+pid != pg_backend_pid()
+order by 4 desc ;
+
+--Долгие запросы с бликирующими сессиями
+pid , 
+ pg_blocking_pids(pid),
+ datname ,  
+ now() - query_start AS query_duration, 
+ now() - xact_start AS transaction_duration , 
+ state , 
+ wait_event_type , 
+ wait_event  , 
+ substring( query from 1 for 40 ) AS query
+from 
+pg_stat_activity 
+where 
+state ='active' and 
+pid != pg_backend_pid() and
+backend_type = 'client backend'
+order by 5 desc ;
+
+select
+ pid ,
+ pg_blocking_pids(pid),
+ datname , 
+ usename,
+ backend_start::timestamp(0),
+ now() - query_start AS query_duration,
+ now() - xact_start as xact_duration, 
+ wait_event_type ,
+ wait_event  ,
+ substring( query from 1 for 60 ) AS query
+from
+pg_stat_activity
+where
+state ='active' and
+pid != pg_backend_pid() and
+backend_type = 'client backend'
+order by 6 desc ;
+#################################
+Проверка ожиданий.
+#################################
+--- Количество ожиданий по типам
+select 
+ count(*) , 
+ state , 
+ wait_event_type , 
+ wait_event ,
+ usename , 
+ application_name , 
+ backend_type ,
+ client_addr
+from 
+pg_stat_activity 
+group by 
+ state , 
+ wait_event_type , 
+ wait_event ,
+ usename , 
+ application_name , 
+ backend_type ,
+ client_addr
+order by 
+2, 1 ;
+
+-- Количество ожиданий по БД
+SELECT 
+  datname , usename ,  application_name, client_addr ,
+  wait_event_type , wait_event  , state , count(*) 
+FROM
+  pg_stat_activity
+WHERE
+  pid <> pg_backend_pid()
+  AND
+  (wait_event_type IS NOT NULL AND wait_event IS NOT NULL )
+GROUP BY
+  datname , usename , application_name,
+  client_addr , wait_event_type , wait_event  , state 
+ORDER BY 
+  datname  , state ;
+
+-- Количество ожиданий по типу
+select
+event_type ,
+event ,
+sum(count) as total
+from
+pg_wait_sampling_profile
+where
+queryid <> 0
+group by
+event_type , event
+order by event_type , total desc , event ;
+
+
 ###############################################################################################
 Работа с СУБД
 
