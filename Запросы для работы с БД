@@ -1,4 +1,46 @@
-Размеры таблицы 
+Определения длинны строки ячейки 
+select _userid, length(_settingsdata) as size_of_settingsdata from _systemsettings order by 2 desc limit 3;
+
+Разрешить подключение к БД 
+update pg_database set datallowconn = 't' where datname='template0';
+
+-- Проверка таблиц и их расположение (табличное пространство):
+SELECT 
+    schemaname AS schema_name, 
+    tablename AS table_name, 
+    tablespace AS tablespace_name
+FROM 
+    pg_tables
+WHERE 
+    schemaname NOT IN ('pg_catalog', 'information_schema')
+ORDER BY 
+    schemaname, tablename;
+
+Проверка индексов и их расположение (табличное пространство):
+SELECT 
+    schemaname AS schema_name, 
+    indexname AS index_name, 
+    tablespace AS tablespace_name
+FROM 
+    pg_indexes
+WHERE 
+    schemaname NOT IN ('pg_catalog', 'information_schema')
+ORDER BY 
+    schemaname, indexname;
+
+-- Проверил зависящие от правил сортировки объекты:
+ias_rem=# SELECT pg_describe_object(refclassid, refobjid, refobjsubid) AS "Collation",
+       pg_describe_object(classid, objid, objsubid) AS "Object"
+  FROM pg_depend d JOIN pg_collation c
+       ON refclassid = 'pg_collation'::regclass AND refobjid = c.oid
+  WHERE c.collversion <> pg_collation_actual_version(c.oid)
+  ORDER BY 1, 2;
+      Collation      | Object
+---------------------+--------
+ collation "default" |
+
+
+-- Размеры таблицы 
 select 
 pg_total_relation_size(tb1),
 pg_total_size(tb1), -- общий размер таблицы или индекса, включая сам объект и все зависимые от него объекты
