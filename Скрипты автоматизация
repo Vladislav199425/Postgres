@@ -1,0 +1,5 @@
+# Посмотреть список всех расширений во всех БД
+for DB in $(psql -Aqt -c "SELECT datname FROM pg_database");
+do 
+echo -e "=======\nDB:  $DB\n-------" && psql -Aqt -c "select extname from pg_extension";
+done
