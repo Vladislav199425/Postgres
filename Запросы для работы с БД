@@ -1,3 +1,9 @@
+показать файл pg_hba
+SELECT type, database, user_name, address, auth_method
+FROM pg_hba_file_rules()
+WHERE 'replication' = ANY(database);
+
+
 Определения длинны строки ячейки 
 select _userid, length(_settingsdata) as size_of_settingsdata from _systemsettings order by 2 desc limit 3;
 
