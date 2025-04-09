@@ -1,3 +1,8 @@
+-- Проверка locale 
+SHOW locale_provider;
+SELECT * FROM pg_collation WHERE collname = 'default';
+
+
 показать файл pg_hba
 SELECT type, database, user_name, address, auth_method
 FROM pg_hba_file_rules()
